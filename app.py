@@ -138,7 +138,50 @@ st.write(f"Barramento: {busbar}")
 
 st.subheader("🌡 Ventilação Painel")
 st.write(ventilation)
+st.header("📐 Dimensionamento Interno da Máquina")
 
+col1, col2, col3 = st.columns(3)
+
+altura = col1.number_input("Altura da Máquina (mm)", 500, 5000, 900)
+largura = col2.number_input("Largura da Máquina (mm)", 500, 5000, 800)
+profundidade = col3.number_input("Profundidade (mm)", 300, 3000, 600)
+
+tensao = st.selectbox("Tensão de Alimentação", [220, 380])
+rota = st.selectbox("Tipo de Roteamento Interno", ["Simples", "Organizado com curvas"])
+
+# Fator de percurso
+fator = 1.4 if rota == "Simples" else 1.8
+
+# Cálculo de metragem estimada
+percurso_base = (altura + largura) / 1000
+metragem_total = round(percurso_base * fator, 2)
+
+# Quantidade de cabos (3 fases + terra se 380)
+if tensao == 380:
+    num_condutores = 4
+else:
+    num_condutores = 3
+
+metragem_final = round(metragem_total * num_condutores, 2)
+
+# Tipo de terminal baseado na bitola
+if "2.5" in cable or "4" in cable or "6" in cable:
+    terminal = "Olhal M6"
+elif "10" in cable or "16" in cable:
+    terminal = "Olhal M8"
+else:
+    terminal = "Olhal M10"
+
+# Quantidade de terminais
+terminais = num_condutores * 2
+
+st.subheader("📊 Resultado do Cabeamento Interno")
+
+st.write(f"Comprimento estimado por condutor: {metragem_total} m")
+st.write(f"Metragem total de cabos: {metragem_final} m")
+st.write(f"Quantidade de condutores: {num_condutores}")
+st.write(f"Tipo de terminal recomendado: {terminal}")
+st.write(f"Quantidade total de terminais: {terminais}")
 # =========================
 # GERAR MEMORIAL PDF
 # =========================
