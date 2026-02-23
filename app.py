@@ -6,7 +6,7 @@ import pandas as pd
 
 # PDF
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 
@@ -107,7 +107,6 @@ st.header("🔥 Resistência Trifásica Bifilar")
 res_kw = st.number_input("Potência Total Resistência (kW)", 0.0, 500.0, 0.0)
 
 res_current = resistance_current(res_kw)
-
 st.write(f"Corrente resistência: {res_current} A")
 
 # =========================
@@ -118,7 +117,7 @@ total_current = round(sum(motor_currents) + res_current, 2)
 breaker = breaker_select(total_current)
 cable = cable_size(total_current)
 busbar = busbar_dimension(total_current)
-thermal = thermal_calc(num_motores, inverter_used)
+thermal = thermal_calc(num_motors, inverter_used)
 ventilation = ventilation_recommendation(thermal)
 
 # =========================
@@ -138,10 +137,14 @@ st.write(f"Barramento: {busbar}")
 
 st.subheader("🌡 Ventilação Painel")
 st.write(ventilation)
+
+# =========================
+# DIMENSIONAMENTO INTERNO
+# =========================
+
 st.header("📐 Dimensionamento Interno da Máquina")
 
 col1, col2, col3 = st.columns(3)
-
 altura = col1.number_input("Altura da Máquina (mm)", 500, 5000, 900)
 largura = col2.number_input("Largura da Máquina (mm)", 500, 5000, 800)
 profundidade = col3.number_input("Profundidade (mm)", 300, 3000, 600)
@@ -149,22 +152,13 @@ profundidade = col3.number_input("Profundidade (mm)", 300, 3000, 600)
 tensao = st.selectbox("Tensão de Alimentação", [220, 380])
 rota = st.selectbox("Tipo de Roteamento Interno", ["Simples", "Organizado com curvas"])
 
-# Fator de percurso
 fator = 1.4 if rota == "Simples" else 1.8
-
-# Cálculo de metragem estimada
 percurso_base = (altura + largura) / 1000
 metragem_total = round(percurso_base * fator, 2)
 
-# Quantidade de cabos (3 fases + terra se 380)
-if tensao == 380:
-    num_condutores = 4
-else:
-    num_condutores = 3
-
+num_condutores = 4 if tensao == 380 else 3
 metragem_final = round(metragem_total * num_condutores, 2)
 
-# Tipo de terminal baseado na bitola
 if "2.5" in cable or "4" in cable or "6" in cable:
     terminal = "Olhal M6"
 elif "10" in cable or "16" in cable:
@@ -172,18 +166,43 @@ elif "10" in cable or "16" in cable:
 else:
     terminal = "Olhal M10"
 
-# Quantidade de terminais
 terminais = num_condutores * 2
 
 st.subheader("📊 Resultado do Cabeamento Interno")
-
 st.write(f"Comprimento estimado por condutor: {metragem_total} m")
 st.write(f"Metragem total de cabos: {metragem_final} m")
 st.write(f"Quantidade de condutores: {num_condutores}")
 st.write(f"Tipo de terminal recomendado: {terminal}")
 st.write(f"Quantidade total de terminais: {terminais}")
+
 # =========================
-# GERAR MEMORIAL PDF
+# LISTA DE MATERIAIS
+# =========================
+
+def gerar_lista_materiais():
+    materiais = []
+
+    materiais.append(["Disjuntor Geral", f"{breaker} A", 1])
+    materiais.append(["Cabo Alimentação", cable, metragem_final])
+    materiais.append(["Barramento Cobre", busbar, 1])
+    materiais.append([f"Terminal {terminal}", terminal, terminais])
+
+    for i in range(num_motores):
+        materiais.append([f"Contator Motor {i+1}", "Compatível com corrente", 1])
+        materiais.append([f"Relé Térmico Motor {i+1}", "Compatível com corrente", 1])
+        materiais.append([f"Cabo Motor {i+1}", cable, metragem_total])
+        materiais.append([f"Terminais Motor {i+1}", terminal, 6])
+
+    if res_kw > 0:
+        materiais.append(["Contator Resistência", "Compatível com potência", 1])
+        materiais.append(["Disjuntor Resistência", "Curva C", 1])
+        materiais.append(["Cabo Resistência", cable, metragem_total])
+        materiais.append(["Terminais Resistência", terminal, 6])
+
+    return pd.DataFrame(materiais, columns=["Item", "Especificação", "Quantidade"])
+
+# =========================
+# PDF
 # =========================
 
 def gerar_pdf():
@@ -199,37 +218,31 @@ def gerar_pdf():
         ["Cliente", cliente],
         ["OS", os],
         ["Responsável", responsavel],
-        ["Data", str(datetime.now().date())],
         ["Modelo", modelo],
         ["Corrente Total (A)", total_current],
         ["Disjuntor Geral (A)", breaker],
         ["Bitola Cabo", cable],
         ["Barramento", busbar],
-        ["Carga Térmica (W)", thermal],
-        ["Ventilação", ventilation]
     ]
 
-    table = Table(data)
-    table.setStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.grey),
-        ('GRID', (0,0), (-1,-1), 1, colors.black)
-    ])
+    elements.append(Table(data))
+    elements.append(Spacer(1, 0.4 * inch))
 
-    elements.append(table)
+    elements.append(Paragraph("Lista de Materiais", styles["Heading2"]))
+    df_mat = gerar_lista_materiais()
+    data_mat = [df_mat.columns.tolist()] + df_mat.values.tolist()
+    elements.append(Table(data_mat))
+
     doc.build(elements)
     buffer.seek(0)
     return buffer
 
 # =========================
-# GERAR EXCEL
+# EXCEL
 # =========================
 
 def gerar_excel():
-    df = pd.DataFrame({
-        "Item": ["Disjuntor Geral", "Cabo Principal", "Barramento", "Carga Térmica"],
-        "Especificação": [f"{breaker} A", cable, busbar, f"{thermal} W"]
-    })
-
+    df = gerar_lista_materiais()
     buffer = BytesIO()
     df.to_excel(buffer, index=False)
     buffer.seek(0)
