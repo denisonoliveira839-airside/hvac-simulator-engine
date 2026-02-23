@@ -92,7 +92,11 @@ inverter_used = False
 for i in range(num_motores):
     col1, col2 = st.columns(2)
     cv = col1.number_input(f"Motor {i+1} Potência (CV)", 0.5, 200.0, 5.0)
-    partida = col2.selectbox(f"Tipo Partida Motor {i+1}", ["Direta", "Inversor", "Soft-starter"], key=i)
+    partida = col2.selectbox(
+        f"Tipo Partida Motor {i+1}",
+        ["Direta", "Inversor", "Soft-starter"],
+        key=f"partida_{i}"
+    )
 
     current = motor_current(cv)
     motor_currents.append(current)
@@ -105,7 +109,6 @@ for i in range(num_motores):
 st.header("🔥 Resistência Trifásica Bifilar")
 
 res_kw = st.number_input("Potência Total Resistência (kW)", 0.0, 500.0, 0.0)
-
 res_current = resistance_current(res_kw)
 st.write(f"Corrente resistência: {res_current} A")
 
@@ -117,7 +120,7 @@ total_current = round(sum(motor_currents) + res_current, 2)
 breaker = breaker_select(total_current)
 cable = cable_size(total_current)
 busbar = busbar_dimension(total_current)
-thermal = thermal_calc(num_motors, inverter_used)
+thermal = thermal_calc(num_motores, inverter_used)
 ventilation = ventilation_recommendation(thermal)
 
 # =========================
@@ -209,12 +212,12 @@ def gerar_pdf():
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer)
     elements = []
-
     styles = getSampleStyleSheet()
+
     elements.append(Paragraph("MEMORIAL TÉCNICO – AIRSIDE PRO", styles["Title"]))
     elements.append(Spacer(1, 0.3 * inch))
 
-    data = [
+    resumo = [
         ["Cliente", cliente],
         ["OS", os],
         ["Responsável", responsavel],
@@ -225,13 +228,13 @@ def gerar_pdf():
         ["Barramento", busbar],
     ]
 
-    elements.append(Table(data))
+    elements.append(Table(resumo))
     elements.append(Spacer(1, 0.4 * inch))
 
     elements.append(Paragraph("Lista de Materiais", styles["Heading2"]))
-    df_mat = gerar_lista_materiais()
-    data_mat = [df_mat.columns.tolist()] + df_mat.values.tolist()
-    elements.append(Table(data_mat))
+    df = gerar_lista_materiais()
+    data = [df.columns.tolist()] + df.values.tolist()
+    elements.append(Table(data))
 
     doc.build(elements)
     buffer.seek(0)
